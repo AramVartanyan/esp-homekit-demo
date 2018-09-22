@@ -57,6 +57,7 @@ export ESPPORT=/dev/tty.SLAB_USBtoUART
 
 
 1. Initialize and sync all submodules (recursively):
+
 ```shell
 git submodule update --init --recursive
 ```
@@ -96,49 +97,49 @@ https://gist.github.com/xuhdev/8b1b16fb802f6870729038ce3789568f
 4. If you continue to face errors you may have to do also:
 
 ```shell
-    sudo port install git gsed gawk binutils gperf grep gettext py-serial wget libtool autoconf automake
+   sudo port install git gsed gawk binutils gperf grep gettext py-serial wget libtool autoconf automake
     
-    brew install help2man
+   brew install help2man
     
-    sudo easy_install pip
+   sudo easy_install pip
     
-    pip install --user  pyserial
+   pip install --user  pyserial
 ```
 
 5. You may have to make a case-sensitive volume. Execute the following:
 
 ```shell
-    sudo hdiutil create ~/Documents/case-sensitive.dmg -volname "case-sensitive" -size 10g -fs "Case-sensitive HFS+"
+   sudo hdiutil create ~/Documents/case-sensitive.dmg -volname "case-sensitive" -size 10g -fs "Case-sensitive HFS+"
     
-    sudo hdiutil mount ~/Documents/case-sensitive.dmg
+   sudo hdiutil mount ~/Documents/case-sensitive.dmg
     
-    cd /Volumes/case-sensitive
+   cd /Volumes/case-sensitive
 ```
 
 6. When you compile the compiller succesfully then you will have to follow the instruction above.
    Do not forget to install the components:
    
 ```shell
-    cd /Users/.../.../esp-homekit-demo-master/components
+   cd /Users/.../.../esp-homekit-demo-master/components
 
-    git clone --recursive https://github.com/pcsaito/WS2812FX-rtos.git
+   git clone --recursive https://github.com/pcsaito/WS2812FX-rtos.git
 
-    git clone --recursive https://github.com/maximkulkin/esp-cjson.git
+   git clone --recursive https://github.com/maximkulkin/esp-cjson.git
 
-    git clone --recursive https://github.com/maximkulkin/esp-homekit.git
+   git clone --recursive https://github.com/maximkulkin/esp-homekit.git
 
-    git clone --recursive https://github.com/maximkulkin/esp-http-parser.git
+   git clone --recursive https://github.com/maximkulkin/esp-http-parser.git
 
-    git clone --recursive https://github.com/maximkulkin/esp-wifi-config.git
+   git clone --recursive https://github.com/maximkulkin/esp-wifi-config.git
 
-    git clone --recursive https://github.com/maximkulkin/esp-wolfssl.git
+   git clone --recursive https://github.com/maximkulkin/esp-wolfssl.git
 ```
 
 Change the components directory names to:
 
 cJSON; homekit; http-parser; wifi_config; wolfssl; WS2812FX
 
-7. For the example compilation you will have to and make the esp-open-rtos available on your PATH.
+7. For the example compilation you will have to make the esp-open-rtos available on your PATH.
    Example:
 
 ```shell
@@ -146,3 +147,25 @@ cJSON; homekit; http-parser; wifi_config; wolfssl; WS2812FX
    export SDK_PATH=/Volumes/case-sensitive/esp-open-rtos
 ```
 
+Than compile the example:
+
+```shell
+   cd /Users/.../.../esp-homekit-demo-master/
+   make -C examples/led_dim all
+```
+
+8. If you are using the 4MB USB ESP-8266 D1 mInI module you will find it at something like /dev/tty.wchusbserialfa140
+Chek where it is with:
+
+```shell
+   ls /dev/tty*
+```
+Than you are ready to flash:
+
+```shell
+   export ESPPORT=/dev/tty.wchusbserialfa140
+   make -C examples/led_dim erase_flash
+   make -C examples/led_dim flash
+   make -C examples/led_dim monitor
+```
+9. Enjoy
