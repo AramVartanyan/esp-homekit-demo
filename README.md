@@ -136,12 +136,7 @@ https://gist.github.com/xuhdev/8b1b16fb802f6870729038ce3789568f
 
 Change the components directory names to:
 
-cJSON
-homekit
-http-parser
-wifi_config
-wolfssl
-WS2812FX
+cJSON; homekit; http-parser; wifi_config; wolfssl; WS2812FX
 
 7. For the example compilation you will have to and make the esp-open-rtos available on your PATH.
    Example:
