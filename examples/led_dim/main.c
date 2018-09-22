@@ -213,7 +213,7 @@ modified to do pulse-width-modulation (PWM) of LED
              .characteristics=(homekit_characteristic_t*[]){
                  &name,
                  HOMEKIT_CHARACTERISTIC(MANUFACTURER, "Armo Ltd."),
-                 HOMEKIT_CHARACTERISTIC(SERIAL_NUMBER, "001A1AVBG03P"),
+                 HOMEKIT_CHARACTERISTIC(SERIAL_NUMBER, "002A1AVBG03P"),
                  HOMEKIT_CHARACTERISTIC(MODEL, "PWM Dimmer"),
                  HOMEKIT_CHARACTERISTIC(FIRMWARE_REVISION, "0.1.8"),
                  HOMEKIT_CHARACTERISTIC(IDENTIFY, light_identify),
@@ -234,7 +234,7 @@ modified to do pulse-width-modulation (PWM) of LED
 
  homekit_server_config_t config = {
      .accessories = accessories,
-     .password = "320-10-123"
+     .password = "111-11-111" //It must to be changed
  };
 
  void on_wifi_ready() {
