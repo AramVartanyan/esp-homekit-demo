@@ -155,6 +155,7 @@ Than compile the example:
 ```
 
 8. If you are using the 4MB USB ESP-8266 D1 mInI module you will find it at something like /dev/tty.wchusbserialfa140
+(You will also need to install the Wemos drivers - CH341SER.)
 Chek where it is with:
 
 ```shell
