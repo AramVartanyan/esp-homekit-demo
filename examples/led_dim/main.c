@@ -1,14 +1,13 @@
 /*
  * Example of using esp-homekit library to control
- * a LED dimmer with chinees mInI D1 USB using HomeKit.
+ * a white LED pwm dimmer with chinees mInI D1 (Wemos) USB using HomeKit.
+ * The dimmer has the ability to smoothly reach the set Brightness.
  * The esp-wifi-config library is also used in this
  * example. This means you don't have to specify
  * your network's SSID and password before building.
  *
- * WARNING: Never connect the device to AC while it's
- * connected to the computer port. This may fry them all.
- *
-modified to do pulse-width-modulation (PWM) of LED
+ * WARNING: Never connect the device to another power source while
+ * it's connected to the computer port. This may fry them all.
  */
 
  #include <stdio.h>
@@ -77,7 +76,7 @@ modified to do pulse-width-modulation (PWM) of LED
      gpio_enable(led_gpio, GPIO_OUTPUT);
      led_write(on);
      pins[0] = pwm_gpio;
-     pwm_init(1, pins, true);
+     pwm_init(1, pins, true); //Check your dimming hardware if you have to change this to "false"
  }
 
 
@@ -90,7 +89,7 @@ modified to do pulse-width-modulation (PWM) of LED
          w = (UINT16_MAX - UINT16_MAX*bri1*0.01);
          pwm_set_duty(w);
          printf("ON  %3d [%5d]\n", (int)bri1 , w);
-         vTaskDelay(10);
+         vTaskDelay(7);
          }
        } else {
           if (bri2 < bri1) {
@@ -99,7 +98,7 @@ modified to do pulse-width-modulation (PWM) of LED
           w = (UINT16_MAX - UINT16_MAX*bri1*0.01);
           pwm_set_duty(w);
           printf("ON  %3d [%5d]\n", (int)bri1 , w);
-          vTaskDelay(10);
+          vTaskDelay(7);
          }
      } else {
           if (bri2==bri1) {
@@ -115,7 +114,7 @@ modified to do pulse-width-modulation (PWM) of LED
           w = (UINT16_MAX - UINT16_MAX*bri1*0.01);
           pwm_set_duty(w);
           printf("OFF  %3d [%5d]\n", (int)bri1 , w);
-          vTaskDelay(5);
+          vTaskDelay(2);
          }
      }
      vTaskDelete(NULL);
@@ -249,7 +248,7 @@ modified to do pulse-width-modulation (PWM) of LED
 
  homekit_server_config_t config = {
      .accessories = accessories,
-     .password = "111-11-111" //It must to be changed
+     .password = "111-11-111" //It must to be changed to be valid
  };
 
  void on_wifi_ready() {
