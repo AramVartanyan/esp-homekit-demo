@@ -84,24 +84,39 @@ modified to do pulse-width-modulation (PWM) of LED
  void lightSET_task(void *pvParameters) {
      int w;
      if (on) {
-         if (bri2 >= bri1) {
-         for (;bri2 >= bri1; bri1++) {
+         if (bri2 > bri1) {
+         while (bri2 > bri1) {
+         bri1=bri1+1;
          w = (UINT16_MAX - UINT16_MAX*bri1*0.01);
          pwm_set_duty(w);
          printf("ON  %3d [%5d]\n", (int)bri1 , w);
          vTaskDelay(10);
          }
-       } else if (bri2 <= bri1) {
-         for (;bri2 <= bri1; bri1--) {
-         w = (UINT16_MAX - UINT16_MAX*bri1*0.01);
-         pwm_set_duty(w);
-         printf("ON  %3d [%5d]\n", (int)bri1 , w);
-         vTaskDelay(10);
-         }
+       } else {
+          if (bri2 < bri1) {
+          while (bri2 < bri1) {
+          bri1=bri1-1;
+          w = (UINT16_MAX - UINT16_MAX*bri1*0.01);
+          pwm_set_duty(w);
+          printf("ON  %3d [%5d]\n", (int)bri1 , w);
+          vTaskDelay(10);
          }
      } else {
-         printf("OFF\n");
-         pwm_set_duty(UINT16_MAX);
+          if (bri2==bri1) {
+          w = (UINT16_MAX - UINT16_MAX*bri1*0.01);
+          pwm_set_duty(w);
+          printf("ON  %3d [%5d]\n", (int)bri1 , w);
+          }
+          }
+         }
+     } else {
+          while (bri1 > 0) {
+          bri1=bri1-1;
+          w = (UINT16_MAX - UINT16_MAX*bri1*0.01);
+          pwm_set_duty(w);
+          printf("OFF  %3d [%5d]\n", (int)bri1 , w);
+          vTaskDelay(5);
+         }
      }
      vTaskDelete(NULL);
  }
