@@ -32,6 +32,8 @@ const int led_gpio = 2;
 // The GPIO pin that is oconnected to an external button (D3 pin).
 const int button_gpio = 0;
 
+bool out;
+
 void switch_on_callback(homekit_characteristic_t *_ch, homekit_value_t on, void *context);
 void button_callback(uint8_t gpio, button_event_t event);
 
@@ -84,11 +86,15 @@ void gpio_init() {
     gpio_enable(led_gpio, GPIO_OUTPUT);
     led_write(false);
     gpio_enable(relay_gpio, GPIO_OUTPUT);
-    relay_write(switch_on.value.bool_value);
+    out = switch_on.value.bool_value;
+    led_write(out);
+    relay_write(out);
 }
 
 void switch_on_callback(homekit_characteristic_t *_ch, homekit_value_t on, void *context) {
-    relay_write(switch_on.value.bool_value);
+    out = switch_on.value.bool_value;
+    led_write(out);
+    relay_write(out);
 }
 
 void button_callback(uint8_t gpio, button_event_t event) {
@@ -96,7 +102,9 @@ void button_callback(uint8_t gpio, button_event_t event) {
         case button_event_single_press:
             printf("Toggling relay\n");
             switch_on.value.bool_value = !switch_on.value.bool_value;
-            relay_write(switch_on.value.bool_value);
+            out = switch_on.value.bool_value;
+            led_write(out);
+            relay_write(out);
             homekit_characteristic_notify(&switch_on, switch_on.value);
             break;
         case button_event_long_press:
@@ -139,7 +147,7 @@ homekit_accessory_t *accessories[] = {
             HOMEKIT_CHARACTERISTIC(MANUFACTURER, "Armo Ltd."),
             HOMEKIT_CHARACTERISTIC(SERIAL_NUMBER, "001A1AVBG02P"),
             HOMEKIT_CHARACTERISTIC(MODEL, "D1"),
-            HOMEKIT_CHARACTERISTIC(FIRMWARE_REVISION, "0.1.7"),
+            HOMEKIT_CHARACTERISTIC(FIRMWARE_REVISION, "0.1.8"),
             HOMEKIT_CHARACTERISTIC(IDENTIFY, switch_identify),
             NULL
         }),
@@ -155,7 +163,7 @@ homekit_accessory_t *accessories[] = {
 
 homekit_server_config_t config = {
     .accessories = accessories,
-    .password = "320-10-122"
+    .password = "111-11-111" //must be changed to be valid
 };
 
 void on_wifi_ready() {
