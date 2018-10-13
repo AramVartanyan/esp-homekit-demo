@@ -97,11 +97,11 @@ void reset_configuration() {
 //void irr_r_duration_callback(homekit_characteristic_t *_ch, homekit_value_t irr_r_duration, void *context);
 
 homekit_value_t irr_active_get() {
-  return HOMEKIT_FLOAT(irr_active);
+  return HOMEKIT_UINT8(irr_active);
 }
 
 void irr_active_set(homekit_value_t value) {
-  if (value.format != homekit_format_float) {
+  if (value.format != homekit_format_uint8) {
     //printf("Invalid Active value format: %d\n", value.format);
     return;
   }
@@ -109,11 +109,11 @@ void irr_active_set(homekit_value_t value) {
 }
 
 homekit_value_t irr_program_mode_get() {
-  return HOMEKIT_FLOAT(irr_program_mode);
+  return HOMEKIT_UINT8(irr_program_mode);
 }
 
 void irr_program_mode_set(homekit_value_t value) {
-  if (value.format != homekit_format_float) {
+  if (value.format != homekit_format_uint8) {
     // printf("Invalid Program mode value format: %d\n", value.format);
     return;
   }
@@ -121,11 +121,11 @@ void irr_program_mode_set(homekit_value_t value) {
 }
 
 homekit_value_t irr_in_use_get() {
-  return HOMEKIT_FLOAT(irr_in_use);
+  return HOMEKIT_UINT8(irr_in_use);
 }
 
 void irr_in_use_set(homekit_value_t value) {
-  if (value.format != homekit_format_float) {
+  if (value.format != homekit_format_uint8) {
     // printf("Invalid In use value format: %d\n", value.format);
     return;
   }
@@ -133,11 +133,11 @@ void irr_in_use_set(homekit_value_t value) {
 }
 
 homekit_value_t irr_r_duration_get() {
-  return HOMEKIT_FLOAT(irr_r_duration);
+  return HOMEKIT_UINT32(irr_r_duration);
 }
 
 void irr_r_duration_set(homekit_value_t value) {
-  if (value.format != homekit_format_float) {
+  if (value.format != homekit_format_uint32) {
     // printf("Invalid Remaining duration value format: %d\n", value.format);
     return;
   }
