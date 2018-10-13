@@ -1,4 +1,4 @@
-
+//This is a test code.
 #include <stdio.h>
 #include <espressif/esp_wifi.h>
 #include <espressif/esp_sta.h>
@@ -23,9 +23,9 @@ const int relay_gpio = 16;
 const int button_gpio = 0;
 
 // Global variables
-int irr_active = 0;         // Active is 1 or 0
-int irr_program_mode = 0;   // Program mode is 0, 1 or 2
-int irr_in_use = 0;         // In use status is 1 or 0
+int irr_active = 0;         // Active is 1 or 0 [inactive, active]
+int irr_program_mode = 0;   // Program mode is 0, 1 or 2 [no program scheduled, program scheduled, manual mode]
+int irr_in_use = 0;         // In use status is 1 or 0 [in use, not in use]
 int irr_r_duration = 0;     // Remaining duration is from 0 to 3600 in 1 s steps
 
 void relay_write(bool on) {
