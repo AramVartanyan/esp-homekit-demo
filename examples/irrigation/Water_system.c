@@ -96,11 +96,6 @@ void reset_configuration() {
   xTaskCreate(reset_configuration_task, "Reset configuration", 256, NULL, 2, NULL);
 }
 
-//void change_settings_callback() {
-//    sdk_os_timer_disarm(&change_settings_timer);
-//    sdk_os_timer_arm(&change_settings_timer, 3000, 0);
-//}
-
 void v_on_callback(homekit_value_t value);
 homekit_value_t read_v_on_callback();
 homekit_value_t read_in_use_on_callback();
@@ -134,6 +129,10 @@ void v_off() {
     homekit_characteristic_notify(&active, active.value);
     homekit_characteristic_notify(&in_use, in_use.value);
   }
+}
+
+void settimer() {
+  sdk_os_timer_setfn(&v_timer, v_off, NULL);
 }
 
 sdk_os_timer_setfn(&v_timer, v_off, NULL);
