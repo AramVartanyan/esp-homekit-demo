@@ -81,6 +81,7 @@ void reset_configuration_task() {
     vTaskDelay(100 / portTICK_PERIOD_MS);
   }
   printf("Resetting Wifi Config\n");
+  
   wifi_config_reset();
   vTaskDelay(1000 / portTICK_PERIOD_MS);
   printf("Resetting HomeKit Config\n");
@@ -105,18 +106,8 @@ homekit_characteristic_t name = HOMEKIT_CHARACTERISTIC_(NAME, "Watering System")
 homekit_characteristic_t active = HOMEKIT_CHARACTERISTIC_(ACTIVE, 0, .getter=read_v_on_callback, .setter=v_on_callback);
 homekit_characteristic_t valve_type = HOMEKIT_CHARACTERISTIC_(VALVE_TYPE, V_TYPE);
 homekit_characteristic_t in_use = HOMEKIT_CHARACTERISTIC_(IN_USE, 0, .getter=read_in_use_on_callback);
-homekit_characteristic_t set_duration = HOMEKIT_CHARACTERISTIC_(SET_DURATION, 1800, .callback=HOMEKIT_CHARACTERISTIC_CALLBACK(v_set_duration));
+homekit_characteristic_t set_duration = HOMEKIT_CHARACTERISTIC_(SET_DURATION, 900, .callback=HOMEKIT_CHARACTERISTIC_CALLBACK(change_settings_callback));
 homekit_characteristic_t remaining_duration = HOMEKIT_CHARACTERISTIC_(REMAINING_DURATION, 0, .getter=read_rem_duration_on_callback);
-
-void toggle() {
-  if (active.value.int_value == 1) {
-    active.value.int_value = 0;
-  } else {
-    active.value.int_value = 1;
-  }
-  homekit_characteristic_notify(&active, active.value);
-  v_on_callback(active.value);
-}
 
 void v_off() {
   remaining_duration.value.int_value--;
@@ -135,7 +126,9 @@ void settimer() {
   sdk_os_timer_setfn(&v_timer, v_off, NULL);
 }
 
-sdk_os_timer_setfn(&v_timer, v_off, NULL);
+void change_settings_callback() {
+    sdk_os_timer_disarm(&change_settings_timer);
+    sdk_os_timer_arm(&change_settings_timer, 3000, 0);
 
 void v_on_callback(homekit_value_t value) {
   active.value = value;
@@ -178,7 +171,7 @@ homekit_accessory_t *accessories[] = {
       HOMEKIT_CHARACTERISTIC(MANUFACTURER, "Armo Ltd."),
       HOMEKIT_CHARACTERISTIC(SERIAL_NUMBER, "001A1AVBG04P"),
       HOMEKIT_CHARACTERISTIC(MODEL, "WS-D1"),
-      HOMEKIT_CHARACTERISTIC(FIRMWARE_REVISION, "0.4"),
+      HOMEKIT_CHARACTERISTIC(FIRMWARE_REVISION, "0.5"),
       HOMEKIT_CHARACTERISTIC(IDENTIFY, v_identify),
       NULL
     }),
