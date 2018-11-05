@@ -74,8 +74,8 @@ void v_identify_task(void *_args) {
 }
 
 void v_identify(homekit_value_t _value) {
-  printf("Irrigating Identify\n");
-  xTaskCreate(v_identify_task, "Irrigation identify", 128, NULL, 2, NULL);
+  printf("Watering System Identify\n");
+  xTaskCreate(v_identify_task, "Watering System identify", 128, NULL, 2, NULL);
 }
 
 void reset_configuration_task() {
@@ -107,11 +107,11 @@ void reset_configuration_task() {
 }
 
 void reset_configuration() {
-    printf("Resetting Irrigation configuration\n");
+    printf("Resetting Watering System configuration\n");
     xTaskCreate(reset_configuration_task, "Reset configuration", 256, NULL, 2, NULL);
 }
 
-homekit_characteristic_t name = HOMEKIT_CHARACTERISTIC_(NAME, "Irrigation System");
+homekit_characteristic_t name = HOMEKIT_CHARACTERISTIC_(NAME, "Watering System");
 homekit_characteristic_t valve_type = HOMEKIT_CHARACTERISTIC_(VALVE_TYPE, V_TYPE);
 homekit_characteristic_t active = HOMEKIT_CHARACTERISTIC_(ACTIVE, 0, .getter=v_active_get, .setter=v_active_set);
 homekit_characteristic_t in_use = HOMEKIT_CHARACTERISTIC_(IN_USE, 0, .getter=v_in_use_get);
