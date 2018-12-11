@@ -1,16 +1,3 @@
-/*
- * Switch + Temperature and Humidity sensor (device)
- * Example of using esp-homekit library to control
- * a Switch with chinees device USB using HomeKit.
- * The esp-wifi-config library is also used in this
- * example. This means you don't have to specify
- * your network's SSID and password before building.
- *
- * WARNING: Never connect the device to AC while it's
- * connected to the computer port. This may fry them all.
- *
- */
-
 #include <stdio.h>
 #include <espressif/esp_wifi.h>
 #include <espressif/esp_sta.h>
