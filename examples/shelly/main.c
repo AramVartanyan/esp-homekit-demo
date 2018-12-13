@@ -45,7 +45,7 @@ homekit_characteristic_t switch_on = HOMEKIT_CHARACTERISTIC_(ON, false, .callbac
 
 void gpio_init() {
     gpio_enable(TOGGLE_GPIO, GPIO_INPUT);
-    //What is this?
+    //Disable the internal pullup resistor 47k
     gpio_set_pullup(TOGGLE_GPIO->gpio, false, false);
     gpio_enable(RELAY_GPIO, GPIO_OUTPUT);
     relay_write(switch_on.value.bool_value, RELAY_GPIO);
