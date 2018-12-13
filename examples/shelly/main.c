@@ -132,7 +132,5 @@ void user_init(void) {
     gpio_init();
 
     adv_button_create(TOGGLE_GPIO);
-
-//setup this
-    adv_button_register_callback_fn(TOGGLE_GPIO, toggle_switch, 1);
+    adv_button_register_callback_fn(TOGGLE_GPIO, toggle_switch, 2);
 }
