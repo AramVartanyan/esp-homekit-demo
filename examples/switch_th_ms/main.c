@@ -18,6 +18,7 @@
 #include <dht/dht.h>
 
 #define TEMPERATURE_SENSOR_PIN 14
+#define MOTION_SENSOR_GPIO 13
 
 #include "adv_button.h"
 
@@ -28,11 +29,6 @@
 
 // The GPIO pin that is connected to relay pin on the device.
 const int relay_gpio = 12;
-// The GPIO pin that is connected to LED pin on the device.
-const int led_gpio = 13;
-// The GPIO pin that is connected to button pin on the device.
-
-bool out;
 
 void switch_on_callback(homekit_characteristic_t *_ch, homekit_value_t on, void *context);
 
@@ -40,18 +36,7 @@ void relay_write(bool on) {
     gpio_write(relay_gpio, on ? 1 : 0);
 }
 
-void led_write(bool on) {
-    gpio_write(led_gpio, on ? 0 : 1);
-}
-
 void reset_configuration_task() {
-    //Flash the LED first before we start the reset
-    for (int i=0; i<3; i++) {
-        led_write(true);
-        vTaskDelay(100 / portTICK_PERIOD_MS);
-        led_write(false);
-        vTaskDelay(100 / portTICK_PERIOD_MS);
-    }
     printf("Resetting Wifi Config\n");
     wifi_config_reset();
     vTaskDelay(1000 / portTICK_PERIOD_MS);
@@ -72,6 +57,8 @@ homekit_characteristic_t switch_on = HOMEKIT_CHARACTERISTIC_(ON, false, .callbac
 
 homekit_characteristic_t temperature = HOMEKIT_CHARACTERISTIC_(CURRENT_TEMPERATURE, 0);
 homekit_characteristic_t humidity    = HOMEKIT_CHARACTERISTIC_(CURRENT_RELATIVE_HUMIDITY, 0);
+
+homekit_characteristic_t motion_detected = HOMEKIT_CHARACTERISTIC_(MOTION_DETECTED, 0);
 
 void temperature_sensor_task(void *_args) {
     gpio_set_pullup(TEMPERATURE_SENSOR_PIN, false, false);
@@ -96,50 +83,38 @@ void temperature_sensor_task(void *_args) {
     }
 }
 
+void motion_sensor_task(void *_args) {
+    bool motion=0;
+    vTaskDelay(40 / portTICK_PERIOD_MS);
+    motion = gpio_read(MOTION_SENSOR_GPIO);
+    if (motion==1) {
+      motion_detected.value.bool_value=motion;
+      homekit_characteristic_notify(&motion_detected, motion_detected.value);
+      printf("Motion Detected on %d\n", motion);
+    }
+    else {
+      printf("No motion detected %d", motion);
+    }
+}
+
 void gpio_init() {
-    gpio_enable(led_gpio, GPIO_OUTPUT);
     gpio_enable(relay_gpio, GPIO_OUTPUT);
-    led_write(false);
     relay_write(false);
+    gpio_enable(MOTION_SENSOR_GPIO, GPIO_INPUT);
+    gpio_set_pullup(MOTION_SENSOR_GPIO, true, true);
+    xTaskCreate(motion_sensor_task, "Motion Sensor", 256, NULL, 2, NULL);
     xTaskCreate(temperature_sensor_task, "Temperatore Sensor", 256, NULL, 2, NULL);
 }
 
 void switch_on_callback(homekit_characteristic_t *_ch, homekit_value_t on, void *context) {
-    out = switch_on.value.bool_value;
-    led_write(out);
-    relay_write(out);
+    relay_write(switch_on.value.bool_value);
 }
 
 void toggle_switch(const uint8_t gpio) {
     printf("RC >>> Toggle Switch manual\n");
     switch_on.value.bool_value = !switch_on.value.bool_value;
-    out = switch_on.value.bool_value;
-    led_write(out);
-    relay_write(out);
+    relay_write(switch_on.value.bool_value);
     homekit_characteristic_notify(&switch_on, switch_on.value);
-}
-
-void switch_identify_task(void *_args) {
-    // We identify the device by Flashing it's LED.
-    for (int i=0; i<3; i++) {
-        for (int j=0; j<2; j++) {
-            led_write(true);
-            vTaskDelay(100 / portTICK_PERIOD_MS);
-            led_write(false);
-            vTaskDelay(100 / portTICK_PERIOD_MS);
-        }
-
-        vTaskDelay(250 / portTICK_PERIOD_MS);
-    }
-
-    led_write(false);
-
-    vTaskDelete(NULL);
-}
-
-void switch_identify(homekit_value_t _value) {
-    printf("Switch identify\n");
-    xTaskCreate(switch_identify_task, "Switch identify", 128, NULL, 2, NULL);
 }
 
 homekit_characteristic_t name = HOMEKIT_CHARACTERISTIC_(NAME, "Switch");
@@ -150,9 +125,8 @@ homekit_accessory_t *accessories[] = {
             &name,
             HOMEKIT_CHARACTERISTIC(MANUFACTURER, "Armo Ltd."),
             HOMEKIT_CHARACTERISTIC(SERIAL_NUMBER, "003A1AVBG02P"),
-            HOMEKIT_CHARACTERISTIC(MODEL, "S-TH"),
+            HOMEKIT_CHARACTERISTIC(MODEL, "S-THMS"),
             HOMEKIT_CHARACTERISTIC(FIRMWARE_REVISION, "0.2.2"),
-            HOMEKIT_CHARACTERISTIC(IDENTIFY, switch_identify),
             NULL
         }),
         HOMEKIT_SERVICE(SWITCH, .primary=true, .characteristics=(homekit_characteristic_t*[]){
@@ -168,6 +142,11 @@ homekit_accessory_t *accessories[] = {
         HOMEKIT_SERVICE(HUMIDITY_SENSOR, .characteristics=(homekit_characteristic_t*[]) {
             HOMEKIT_CHARACTERISTIC(NAME, "Humidity Sensor"),
             &humidity,
+            NULL
+        }),
+        HOMEKIT_SERVICE(MOTION_SENSOR, .primary=false, .characteristics=(homekit_characteristic_t*[]) {
+            HOMEKIT_CHARACTERISTIC(NAME, "Motion Sensor"),
+            &motion_detected,
             NULL
         }),
         NULL
