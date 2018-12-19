@@ -1,4 +1,4 @@
-PROGRAM = switch
+PROGRAM = switch_th_ms
 
 EXTRA_COMPONENTS = \
 	extras/http-parser \
