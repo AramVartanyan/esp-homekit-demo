@@ -1,5 +1,5 @@
 /*
- * Switch + Temperature and Humidity sensor + Motion sensor (device)
+ * Switch + Temperature and Humidity sensor + Motion sensor (Sonoff redesign)
  */
 
 #include <stdio.h>
@@ -17,23 +17,19 @@
 
 #include <dht/dht.h>
 
-#define TEMPERATURE_SENSOR_PIN 14
-#define MOTION_SENSOR_GPIO 13
-
 #include "adv_button.h"
 
-
+#define TEMPERATURE_SENSOR_PIN 14
+#define MOTION_SENSOR_GPIO 13
+#define RELAY_GPIO 12
 #ifndef BUTTON_GPIO
 #define BUTTON_GPIO     0
 #endif
 
-// The GPIO pin that is connected to relay pin on the device.
-const int relay_gpio = 12;
-
 void switch_on_callback(homekit_characteristic_t *_ch, homekit_value_t on, void *context);
 
 void relay_write(bool on) {
-    gpio_write(relay_gpio, on ? 1 : 0);
+    gpio_write(RELAY_GPIO, on ? 1 : 0);
 }
 
 void reset_configuration_task() {
@@ -83,26 +79,28 @@ void temperature_sensor_task(void *_args) {
     }
 }
 
-void motion_sensor_task(void *_args) {
-    bool motion=0;
-    vTaskDelay(40 / portTICK_PERIOD_MS);
-    motion = gpio_read(MOTION_SENSOR_GPIO);
-    if (motion==1) {
-      motion_detected.value.bool_value=motion;
-      homekit_characteristic_notify(&motion_detected, motion_detected.value);
-      printf("Motion Detected on %d\n", motion);
+void motion_sensor_callback(uint8_t gpio) {
+  if (gpio == MOTION_SENSOR_GPIO){
+    motion_detected.value.bool_value = gpio_read(MOTION_SENSOR_GPIO);
+    homekit_characteristic_notify(&motion_detected, motion_detected.value);
+    printf("Motion Detected on %d\n", gpio);
+    for (int i=0; i<2; i++) {
+        led_write(true);
+        vTaskDelay(200 / portTICK_PERIOD_MS);
+        led_write(false);
+        vTaskDelay(200 / portTICK_PERIOD_MS);
     }
-    else {
-      printf("No motion detected %d", motion);
-    }
+  }
+  else {
+    printf("Interrupt on %d", gpio);
+  }
 }
 
 void gpio_init() {
-    gpio_enable(relay_gpio, GPIO_OUTPUT);
-    relay_write(false);
+    gpio_enable(RELAY_GPIO, GPIO_OUTPUT);
     gpio_enable(MOTION_SENSOR_GPIO, GPIO_INPUT);
-    gpio_set_pullup(MOTION_SENSOR_GPIO, true, true);
-    xTaskCreate(motion_sensor_task, "Motion Sensor", 256, NULL, 2, NULL);
+    gpio_set_interrupt(MOTION_SENSOR_GPIO, GPIO_INTTYPE_EDGE_ANY, motion_sensor_callback);
+    relay_write(false);
     xTaskCreate(temperature_sensor_task, "Temperatore Sensor", 256, NULL, 2, NULL);
 }
 
@@ -126,7 +124,7 @@ homekit_accessory_t *accessories[] = {
             HOMEKIT_CHARACTERISTIC(MANUFACTURER, "Armo Ltd."),
             HOMEKIT_CHARACTERISTIC(SERIAL_NUMBER, "003A1AVBG02P"),
             HOMEKIT_CHARACTERISTIC(MODEL, "S-THMS"),
-            HOMEKIT_CHARACTERISTIC(FIRMWARE_REVISION, "0.2.2"),
+            HOMEKIT_CHARACTERISTIC(FIRMWARE_REVISION, "0.2.3"),
             NULL
         }),
         HOMEKIT_SERVICE(SWITCH, .primary=true, .characteristics=(homekit_characteristic_t*[]){
@@ -166,26 +164,20 @@ void on_wifi_ready() {
 void create_accessory_name() {
     uint8_t macaddr[6];
     sdk_wifi_get_macaddr(STATION_IF, macaddr);
-
     int name_len = snprintf(NULL, 0, "Switch-%02X%02X%02X",
                             macaddr[3], macaddr[4], macaddr[5]);
     char *name_value = malloc(name_len+1);
     snprintf(name_value, name_len+1, "Switch-%02X%02X%02X",
              macaddr[3], macaddr[4], macaddr[5]);
-
     name.value = HOMEKIT_STRING(name_value);
 }
 
 void user_init(void) {
     uart_set_baud(0, 115200);
-
     create_accessory_name();
-
     wifi_config_init("Switch", NULL, on_wifi_ready);
     gpio_init();
-
     adv_button_create(BUTTON_GPIO);
-
     adv_button_register_callback_fn(BUTTON_GPIO, toggle_switch, 1);
     adv_button_register_callback_fn(BUTTON_GPIO, reset_configuration, 5);
 }
