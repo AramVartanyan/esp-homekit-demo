@@ -67,12 +67,6 @@ void motion_sensor_callback(uint8_t gpio) {
     motion_detected.value.bool_value = gpio_read(MOTION_SENSOR_GPIO);
     homekit_characteristic_notify(&motion_detected, motion_detected.value);
     printf("Motion Detected on %d\n", gpio);
-    for (int i=0; i<2; i++) {
-        led_write(true);
-        vTaskDelay(200 / portTICK_PERIOD_MS);
-        led_write(false);
-        vTaskDelay(200 / portTICK_PERIOD_MS);
-    }
   }
   else {
     printf("Interrupt on %d", gpio);
