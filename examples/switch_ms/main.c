@@ -19,9 +19,9 @@
 
 #define MOTION_SENSOR_GPIO 14
 #define RELAY_GPIO 12
-#define LED_GPIO 2
+#define LED_GPIO    2
 #ifndef BUTTON_GPIO
-#define BUTTON_GPIO     0
+#define BUTTON_GPIO 0
 #endif
 
 void switch_on_callback(homekit_characteristic_t *_ch, homekit_value_t on, void *context);
@@ -62,24 +62,33 @@ homekit_characteristic_t switch_on = HOMEKIT_CHARACTERISTIC_(ON, false, .callbac
 
 homekit_characteristic_t motion_detected  = HOMEKIT_CHARACTERISTIC_(MOTION_DETECTED, 0);
 
-void motion_sensor_callback(uint8_t gpio) {
-  if (gpio == MOTION_SENSOR_GPIO){
-    motion_detected.value.bool_value = gpio_read(MOTION_SENSOR_GPIO);
-    homekit_characteristic_notify(&motion_detected, motion_detected.value);
-    printf("Motion Detected on %d\n", gpio);
-  }
-  else {
-    printf("Interrupt on %d", gpio);
-  }
+void motion_sensor_task(void *_args) {
+    gpio_set_pullup(MOTION_SENSOR_GPIO, false, false);
+    while (1) {
+      if (gpio_read(MOTION_SENSOR_GPIO) == true) {
+        motion_detected.value.bool_value = 1;
+        printf("Motion Detected\n");
+        led_write(true);
+        vTaskDelay(50 / portTICK_PERIOD_MS);
+        led_write(false);
+        vTaskDelay(50 / portTICK_PERIOD_MS);
+      }
+      else {
+        motion_detected.value.bool_value = 0;
+      }
+      led_write(switch_on.value.bool_value);
+      homekit_characteristic_notify(&motion_detected, motion_detected.value);
+      vTaskDelay(250 / portTICK_PERIOD_MS);
+    }
 }
 
 void gpio_init() {
+    gpio_enable(MOTION_SENSOR_GPIO, GPIO_INPUT);
     gpio_enable(LED_GPIO, GPIO_OUTPUT);
     gpio_enable(RELAY_GPIO, GPIO_OUTPUT);
-    gpio_enable(MOTION_SENSOR_GPIO, GPIO_INPUT);
-    gpio_set_interrupt(MOTION_SENSOR_GPIO, GPIO_INTTYPE_EDGE_ANY, motion_sensor_callback);
     led_write(false);
     relay_write(false);
+    xTaskCreate(motion_sensor_task, "Motion Sensor", 256, NULL, 2, NULL);
 }
 
 void switch_on_callback(homekit_characteristic_t *_ch, homekit_value_t on, void *context) {
@@ -145,7 +154,7 @@ homekit_accessory_t *accessories[] = {
 
 homekit_server_config_t config = {
     .accessories = accessories,
-    .password = "320-11-122"
+    .password = "320-10-140"
 };
 
 void on_wifi_ready() {
