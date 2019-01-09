@@ -1,18 +1,19 @@
-PROGRAM = temperature_sensor
+PROGRAM = temp_sensor
 
 EXTRA_COMPONENTS = \
 	extras/dht \
 	extras/http-parser \
+	extras/dhcpserver \
+	$(abspath ../../components/wifi_config) \
 	$(abspath ../../components/wolfssl) \
 	$(abspath ../../components/cJSON) \
 	$(abspath ../../components/homekit)
 
-# DHT11 sensor pin
-SENSOR_PIN ?= 4
-
 FLASH_SIZE ?= 32
+FLASH_MODE ?= dout
+FLASH_SPEED ?= 40
 
-EXTRA_CFLAGS += -I../.. -DHOMEKIT_SHORT_APPLE_UUIDS -DSENSOR_PIN=$(SENSOR_PIN)
+EXTRA_CFLAGS += -I../.. -DHOMEKIT_SHORT_APPLE_UUIDS
 
 include $(SDK_PATH)/common.mk
 
