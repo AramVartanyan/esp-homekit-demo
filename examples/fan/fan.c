@@ -1,49 +1,53 @@
-/*
- * Example of using esp-homekit library to control
- * a fan with chinees mInI D1 USB using HomeKit.
- * The esp-wifi-config library is also used in this
- * example. This means you don't have to specify
- * your network's SSID and password before building.
- *
- * WARNING: Never connect the device to AC while it's
- * connected to the computer port. This may fry them all.
- *
- */
+//Driving Fan + Off Timer
 
 #include <stdio.h>
 #include <espressif/esp_wifi.h>
 #include <espressif/esp_sta.h>
+#include <espressif/esp_system.h>
 #include <espressif/esp_common.h>
 #include <esp/uart.h>
 #include <esp8266.h>
+#include <etstimer.h>
+#include <esplibs/libmain.h>
 #include <FreeRTOS.h>
 #include <task.h>
+#include <math.h>
 
 #include <homekit/homekit.h>
 #include <homekit/characteristics.h>
 #include <wifi_config.h>
 
-#include "button.h"
+#include "adv_button.h"
+
+#ifndef BUTTON_GPIO
+#define BUTTON_GPIO 0
+#endif
+
+#define RELAY_GPIO  16
+#define LED_GPIO    2
+
+#define DURATION 7200
 
 // The GPIO pin that is connected to D0 pin on the mInI D1 - the relay.
-const int relay_gpio = 16;
 // The GPIO pin that is connected to D4 pin on the mInI D1 - the Built-in LED.
-const int led_gpio = 2;
 // The GPIO pin that is connected to D3 pin on the mInI D1 - an external button.
-const int button_gpio = 0;
 
-bool out;
+// Time duration 3600s = 1 hour
+uint32_t rem_duration = 0;
+
+ETSTimer v_timer;
 
 void fan_on_callback(homekit_characteristic_t *_ch, homekit_value_t on, void *context);
-void button_callback(uint8_t gpio, button_event_t event);
 
 void relay_write(bool on) {
-    gpio_write(relay_gpio, on ? 1 : 0);
+    gpio_write(RELAY_GPIO, on ? 1 : 0);
 }
 
 void led_write(bool on) {
-    gpio_write(led_gpio, on ? 0 : 1);
+    gpio_write(LED_GPIO, on ? 0 : 1);
 }
+
+void v_off();
 
 void reset_configuration_task() {
     //Flash the LED first before we start the reset
@@ -83,37 +87,47 @@ homekit_characteristic_t fan_on = HOMEKIT_CHARACTERISTIC_(
 );
 
 void gpio_init() {
-    gpio_enable(led_gpio, GPIO_OUTPUT);
+    gpio_enable(LED_GPIO, GPIO_OUTPUT);
+    gpio_enable(RELAY_GPIO, GPIO_OUTPUT);
     led_write(false);
-    gpio_enable(relay_gpio, GPIO_OUTPUT);
-    out = fan_on.value.bool_value;
-    led_write(out);
-    relay_write(out);
+    relay_write(false);
 }
 
 void fan_on_callback(homekit_characteristic_t *_ch, homekit_value_t on, void *context) {
-    out = fan_on.value.bool_value;
-    led_write(out);
-    relay_write(out);
-}
-
-void button_callback(uint8_t gpio, button_event_t event) {
-    switch (event) {
-        case button_event_single_press:
-            printf("Toggling relay\n");
-            fan_on.value.bool_value = !fan_on.value.bool_value;
-            out = fan_on.value.bool_value;
-            led_write(out);
-            relay_write(out);
-            homekit_characteristic_notify(&fan_on, fan_on.value);
-            break;
-        case button_event_long_press:
-            reset_configuration();
-            break;
-        default:
-            printf("Unknown button event: %d\n", event);
+    led_write(fan_on.value.bool_value);
+    relay_write(fan_on.value.bool_value);
+    if (fan_on.value.bool_value == 1) {
+      led_write(true);
+      relay_write(true);
+      printf(">>> Valve ON\n");
+      rem_duration = DURATION;
+      sdk_os_timer_setfn(&v_timer, v_off, NULL);
+      sdk_os_timer_arm(&v_timer, 1000, 1);
+    } else {
+      sdk_os_timer_disarm(&v_timer);
+      led_write(false);
+      relay_write(false);
     }
-}
+  }
+
+  void v_off() {
+    rem_duration--;
+    if (rem_duration == 0) {
+      sdk_os_timer_disarm(&v_timer);
+      led_write(false);
+      relay_write(false);
+      fan_on.value.bool_value = 0;
+      homekit_characteristic_notify(&fan_on, fan_on.value);
+    }
+  }
+
+  void toggle_switch(const uint8_t gpio) {
+      printf("Toggle Switch manual\n");
+      fan_on.value.bool_value = !fan_on.value.bool_value;
+      led_write(fan_on.value.bool_value);
+      relay_write(fan_on.value.bool_value);
+      homekit_characteristic_notify(&fan_on, fan_on.value);
+  }
 
 void fan_identify_task(void *_args) {
     // We identify the mInI by Flashing it's LED.
@@ -145,9 +159,9 @@ homekit_accessory_t *accessories[] = {
         HOMEKIT_SERVICE(ACCESSORY_INFORMATION, .characteristics=(homekit_characteristic_t*[]){
             &name,
             HOMEKIT_CHARACTERISTIC(MANUFACTURER, "Armo Ltd."),
-            HOMEKIT_CHARACTERISTIC(SERIAL_NUMBER, "001A1AVBG05P"),
-            HOMEKIT_CHARACTERISTIC(MODEL, "D1"),
-            HOMEKIT_CHARACTERISTIC(FIRMWARE_REVISION, "0.1.8"),
+            HOMEKIT_CHARACTERISTIC(SERIAL_NUMBER, "002A1AVBG05P"),
+            HOMEKIT_CHARACTERISTIC(MODEL, "FD1-t"),
+            HOMEKIT_CHARACTERISTIC(FIRMWARE_REVISION, "0.2.4"),
             HOMEKIT_CHARACTERISTIC(IDENTIFY, fan_identify),
             NULL
         }),
@@ -163,7 +177,7 @@ homekit_accessory_t *accessories[] = {
 
 homekit_server_config_t config = {
     .accessories = accessories,
-    .password = "111-11-111" //Must be changed to be valid
+    .password = "320-10-125"
 };
 
 void on_wifi_ready() {
@@ -188,10 +202,9 @@ void user_init(void) {
 
     create_accessory_name();
 
-    wifi_config_init("fan", NULL, on_wifi_ready);
+    wifi_config_init("Fan", NULL, on_wifi_ready);
     gpio_init();
-
-    if (button_create(button_gpio, 0, 4000, button_callback)) {
-        printf("Failed to initialize button\n");
-    }
+    adv_button_create(BUTTON_GPIO);
+    adv_button_register_callback_fn(BUTTON_GPIO, toggle_switch, 1);
+    adv_button_register_callback_fn(BUTTON_GPIO, reset_configuration, 5);
 }
