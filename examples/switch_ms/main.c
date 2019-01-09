@@ -19,7 +19,7 @@
 
 #define MOTION_SENSOR_GPIO 14
 #define RELAY_GPIO 12
-#define LED_GPIO    2
+#define LED_GPIO   2
 #ifndef BUTTON_GPIO
 #define BUTTON_GPIO 0
 #endif
@@ -97,7 +97,7 @@ void switch_on_callback(homekit_characteristic_t *_ch, homekit_value_t on, void 
 }
 
 void toggle_switch(const uint8_t gpio) {
-    printf("RC >>> Toggle Switch manual\n");
+    printf("Toggle Switch manual\n");
     switch_on.value.bool_value = !switch_on.value.bool_value;
     led_write(switch_on.value.bool_value);
     relay_write(switch_on.value.bool_value);
@@ -133,7 +133,7 @@ homekit_accessory_t *accessories[] = {
             HOMEKIT_CHARACTERISTIC(MANUFACTURER, "Armo Ltd."),
             HOMEKIT_CHARACTERISTIC(SERIAL_NUMBER, "007A1AVBG02P"),
             HOMEKIT_CHARACTERISTIC(MODEL, "S-MS"),
-            HOMEKIT_CHARACTERISTIC(FIRMWARE_REVISION, "0.2.3"),
+            HOMEKIT_CHARACTERISTIC(FIRMWARE_REVISION, "0.2.4"),
             HOMEKIT_CHARACTERISTIC(IDENTIFY, switch_identify),
             NULL
         }),
