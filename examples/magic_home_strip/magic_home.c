@@ -1,15 +1,3 @@
-/*
-* This is an example of an rgb led strip using Magic Home wifi controller
-* 
-* Debugging printf statements and UART are disabled below because it interfere with mutipwm
-* you can uncomment them for debug purposes
-*
-* more info about the controller and flashing can be found here:
-* https://github.com/arendst/Sonoff-Tasmota/wiki/MagicHome-LED-strip-controller
-*
-* Contributed April 2018 by https://github.com/PCSaito
-*/
-
 #include <stdio.h>
 #include <espressif/esp_wifi.h>
 #include <espressif/esp_sta.h>
@@ -17,7 +5,7 @@
 #include <esp8266.h>
 #include <FreeRTOS.h>
 #include <task.h>
-#include <math.h> 
+#include <math.h>
 
 #include <homekit/homekit.h>
 #include <homekit/characteristics.h>
@@ -25,91 +13,175 @@
 
 #include "multipwm.h"
 
-#define LPF_SHIFT 4  // divide by 16
-#define LPF_INTERVAL 10  // in milliseconds
+#define STEP_MS 15  // in milliseconds
 
 #define RED_PWM_PIN 5
-#define GREEN_PWM_PIN 12
-#define BLUE_PWM_PIN 13
-#define LED_RGB_SCALE 255       // this is the scaling factor used for color conversion
+#define GREEN_PWM_PIN 14
+#define BLUE_PWM_PIN 12
+#define LED_RGB_SCALE 65535       // this is the scaling factor used for color conversion - was 255
 
 typedef union {
     struct {
-        uint16_t blue;
-        uint16_t green;
         uint16_t red;
-        uint16_t white;
+        uint16_t green;
+        uint16_t blue;
     };
     uint64_t color;
 } rgb_color_t;
 
-// Color smoothing variables
-rgb_color_t current_color = { { 0, 0, 0, 0 } };
-rgb_color_t target_color = { { 0, 0, 0, 0 } };
+rgb_color_t target_color = { { 0, 0, 0 } };
 
-// Global variables
 float led_hue = 0;              // hue is scaled 0 to 360
-float led_saturation = 59;      // saturation is scaled 0 to 100
-float led_brightness = 100;     // brightness is scaled 0 to 100
+float led_saturation = 0;      // saturation is scaled 0 to 100
+float led_brightness1 = 0;     // Current brightness is scaled 0 to 100
+float led_brightness2 = 0;     // Target brightness is scaled 0 to 100
 bool led_on = false;            // on is boolean on or off
 
-//http://blog.saikoled.com/post/44677718712/how-to-convert-from-hsi-to-rgb-white
-static void hsi2rgb(float h, float s, float i, rgb_color_t* rgb) {
-    int r, g, b;
+uint8_t pins[] = {RED_PWM_PIN, GREEN_PWM_PIN, BLUE_PWM_PIN};
+pwm_info_t pwm_info;
 
-    while (h < 0) { h += 360.0F; };     // cycle h around to 0-360 degrees
-    while (h >= 360) { h -= 360.0F; };
-    h = 3.14159F*h / 180.0F;            // convert to radians.
-    s /= 100.0F;                        // from percentage to ratio
-    i /= 100.0F;                        // from percentage to ratio
-    s = s > 0 ? (s < 1 ? s : 1) : 0;    // clamp s and i to interval [0,1]
-    i = i > 0 ? (i < 1 ? i : 1) : 0;    // clamp s and i to interval [0,1]
-    //i = i * sqrt(i);                    // shape intensity to have finer granularity near 0
+void lightSET();
 
-    if (h < 2.09439) {
-        r = LED_RGB_SCALE * i / 3 * (1 + s * cos(h) / cos(1.047196667 - h));
-        g = LED_RGB_SCALE * i / 3 * (1 + s * (1 - cos(h) / cos(1.047196667 - h)));
-        b = LED_RGB_SCALE * i / 3 * (1 - s);
+void led_strip_init(){
+    led_on=false;
+    led_brightness2 = 100;
+    pwm_info.freq = 300;
+    pwm_info.channels = 3;
+    pwm_info.reverse = false;
+    multipwm_init(&pwm_info);
+    multipwm_set_pin(&pwm_info, 0, pins[0]);
+    multipwm_set_pin(&pwm_info, 1, pins[1]);
+    multipwm_set_pin(&pwm_info, 2, pins[2]);
+
+    //multipwm_set_freq(&pwm_info, 300);
+    lightSET();
+}
+
+static void hsb2rgb(float hue, float sat, float bright, rgb_color_t* rgb) {
+    int r = 0, g = 0, b = 0;
+    float sat_f = sat / 100;
+    float bright_f = bright / 100;
+
+    // If saturation is 0 then color is gray (achromatic)
+    // therefore, R, G and B values will all equal the current brightness
+    if (sat <= 0) {
+      r = bright_f * LED_RGB_SCALE;
+      g = bright_f * LED_RGB_SCALE;
+      b = bright_f * LED_RGB_SCALE;
     }
-    else if (h < 4.188787) {
-        h = h - 2.09439;
-        g = LED_RGB_SCALE * i / 3 * (1 + s * cos(h) / cos(1.047196667 - h));
-        b = LED_RGB_SCALE * i / 3 * (1 + s * (1 - cos(h) / cos(1.047196667 - h)));
-        r = LED_RGB_SCALE * i / 3 * (1 - s);
-    }
+
+    // if saturation and brightness are greater than 0 then calculate
+  	// R, G and B values based on the current hue and brightness
     else {
-        h = h - 4.188787;
-        b = LED_RGB_SCALE * i / 3 * (1 + s * cos(h) / cos(1.047196667 - h));
-        r = LED_RGB_SCALE * i / 3 * (1 + s * (1 - cos(h) / cos(1.047196667 - h)));
-        g = LED_RGB_SCALE * i / 3 * (1 - s);
+      if ((hue >= 0 && hue < 120.0) || hue == 360.0) {
+        float hue_primary = 1.0 - hue / 120.0;
+  			float hue_secondary = hue / 120.0;
+  			float sat_primary = (1.0 - hue_primary) * (1.0 - sat_f);
+  			float sat_secondary = (1.0 - hue_secondary) * (1.0 - sat_f);
+  			float sat_tertiary = 1.0 - sat_f;
+  			r = (bright_f * LED_RGB_SCALE) * (hue_primary + sat_primary);
+  			g = (bright_f * LED_RGB_SCALE) * (hue_secondary + sat_secondary);
+  			b = (bright_f * LED_RGB_SCALE) * sat_tertiary;
+      }
+      else {
+        if (hue >= 120.0 && hue < 240.0) {
+          float hue_primary = 1.0 - (hue-120.0) / 120.0;
+  		  	float hue_secondary = (hue-120.0) / 120.0;
+  		  	float sat_primary = (1.0 - hue_primary) * (1.0 - sat_f);
+  		  	float sat_secondary = (1.0 - hue_secondary) * (1.0 - sat_f);
+  		  	float sat_tertiary = 1.0 - sat_f;
+  	  		r = (bright_f * LED_RGB_SCALE) * sat_tertiary;
+  		  	g = (bright_f * LED_RGB_SCALE) * (hue_primary + sat_primary);
+  		  	b = (bright_f * LED_RGB_SCALE) * (hue_secondary + sat_secondary);
+        }
+        else {
+          if (hue >= 240.0 && hue <= 360.0) {
+            float hue_primary = 1.0 - (hue-240.0) / 120.0;
+  		    	float hue_secondary = (hue-240.0) / 120.0;
+  			    float sat_primary = (1.0 - hue_primary) * (1.0 - sat_f);
+  			    float sat_secondary = (1.0 - hue_secondary) * (1.0 - sat_f);
+  			    float sat_tertiary = 1.0 - sat_f;
+  			    r = (bright_f * LED_RGB_SCALE) * (hue_secondary + sat_secondary);
+  			    g = (bright_f * LED_RGB_SCALE) * sat_tertiary;
+  			    b = (bright_f * LED_RGB_SCALE) * (hue_primary + sat_primary);
+          }
+        }
+      }
     }
+    rgb->red = (uint16_t) r;
+    rgb->green = (uint16_t) g;
+    rgb->blue = (uint16_t) b;
+  }
 
-    rgb->red = (uint8_t) r;
-    rgb->green = (uint8_t) g;
-    rgb->blue = (uint8_t) b;
+
+void led_strip_send (rgb_color_t *color){
+    multipwm_stop(&pwm_info);
+    multipwm_set_duty(&pwm_info, 0, color->red);
+    multipwm_set_duty(&pwm_info, 1, color->green);
+    multipwm_set_duty(&pwm_info, 2, color->blue);
+    multipwm_start(&pwm_info);
+    printf ("sending r=%d, g=%d, b=%d,\n", color->red,color->green, color->blue);
+}
+
+void lightSET_task(void *pvParameters) {
+  rgb_color_t black_color = { { 0, 0, 0 } };
+
+  if (led_on) {
+    if (led_brightness2 > led_brightness1) {
+      while (led_brightness2 > led_brightness1) {
+        led_brightness1=led_brightness1+1;
+        hsb2rgb(led_hue, led_saturation, led_brightness1, &target_color);
+        led_strip_send(&target_color);
+        vTaskDelay(STEP_MS);
+      }
+    } else {
+      if (led_brightness2 < led_brightness1) {
+        while (led_brightness2 < led_brightness1) {
+          led_brightness1=led_brightness1-1;
+          hsb2rgb(led_hue, led_saturation, led_brightness1, &target_color);
+          led_strip_send(&target_color);
+          vTaskDelay(STEP_MS);
+        }
+      } else {
+        if (led_brightness2==led_brightness1) {
+          hsb2rgb(led_hue, led_saturation, led_brightness1, &target_color);
+          led_strip_send(&target_color);
+          vTaskDelay(STEP_MS);
+        }
+      }
+    }
+  } else {
+//       while (led_brightness1 > 0) {
+//         led_brightness1=led_brightness1-1;
+//         hsb2rgb(led_hue, led_saturation, led_brightness1, &target_color);
+         led_strip_send(&black_color);
+//         vTaskDelay(STEP_MS);
+//       }
+     }
+     vTaskDelete(NULL);
+}
+
+void lightSET() {
+    xTaskCreate(lightSET_task, "Light Set", 256, NULL, 2, NULL);
 }
 
 void led_identify_task(void *_args) {
+
     printf("LED identify\n");
-    
-    rgb_color_t color = target_color;
-    rgb_color_t black_color = { { 0, 0, 0, 0 } };
-    rgb_color_t white_color = { { 128, 128, 128, 128 } };
-    
+
+    rgb_color_t black_color = { { 0, 0, 0 } };
+    rgb_color_t white_color = { { 32767, 32767, 32767 } };
+
     for (int i=0; i<3; i++) {
         for (int j=0; j<2; j++) {
-            target_color = white_color;
+            led_strip_send (&black_color);
             vTaskDelay(100 / portTICK_PERIOD_MS);
-            
-            target_color = black_color;
+            led_strip_send (&white_color);
             vTaskDelay(100 / portTICK_PERIOD_MS);
         }
-
         vTaskDelay(250 / portTICK_PERIOD_MS);
     }
-
-    target_color = color;
-
+    led_strip_send (&target_color);
     vTaskDelete(NULL);
 }
 
@@ -128,10 +200,11 @@ void led_on_set(homekit_value_t value) {
     }
 
     led_on = value.bool_value;
+    lightSET();
 }
 
 homekit_value_t led_brightness_get() {
-    return HOMEKIT_INT(led_brightness);
+    return HOMEKIT_INT(led_brightness2);
 }
 
 void led_brightness_set(homekit_value_t value) {
@@ -139,7 +212,8 @@ void led_brightness_set(homekit_value_t value) {
         // printf("Invalid brightness-value format: %d\n", value.format);
         return;
     }
-    led_brightness = value.int_value;
+    led_brightness2 = value.int_value;
+    lightSET();
 }
 
 homekit_value_t led_hue_get() {
@@ -152,6 +226,7 @@ void led_hue_set(homekit_value_t value) {
         return;
     }
     led_hue = value.float_value;
+    lightSET();
 }
 
 homekit_value_t led_saturation_get() {
@@ -164,23 +239,24 @@ void led_saturation_set(homekit_value_t value) {
         return;
     }
     led_saturation = value.float_value;
+    lightSET();
 }
 
-homekit_characteristic_t name = HOMEKIT_CHARACTERISTIC_(NAME, "LED Strip");
+homekit_characteristic_t name = HOMEKIT_CHARACTERISTIC_(NAME, "RGB LED");
 
 homekit_accessory_t *accessories[] = {
     HOMEKIT_ACCESSORY(.id = 1, .category = homekit_accessory_category_lightbulb, .services = (homekit_service_t*[]) {
         HOMEKIT_SERVICE(ACCESSORY_INFORMATION, .characteristics = (homekit_characteristic_t*[]) {
             &name,
-            HOMEKIT_CHARACTERISTIC(MANUFACTURER, "PCSaito"),
-            HOMEKIT_CHARACTERISTIC(SERIAL_NUMBER, "737A2BAFF19E"),
-            HOMEKIT_CHARACTERISTIC(MODEL, "Magic Home Led Strip"),
-            HOMEKIT_CHARACTERISTIC(FIRMWARE_REVISION, "0.2"),
+            HOMEKIT_CHARACTERISTIC(MANUFACTURER, "Armo Ltd."),
+            HOMEKIT_CHARACTERISTIC(SERIAL_NUMBER, "001A1AVBG06P"),
+            HOMEKIT_CHARACTERISTIC(MODEL, "MagicHome"),
+            HOMEKIT_CHARACTERISTIC(FIRMWARE_REVISION, "0.2.1"),
             HOMEKIT_CHARACTERISTIC(IDENTIFY, led_identify),
             NULL
         }),
         HOMEKIT_SERVICE(LIGHTBULB, .primary = true, .characteristics = (homekit_characteristic_t*[]) {
-            HOMEKIT_CHARACTERISTIC(NAME, "LED Strip"),
+            HOMEKIT_CHARACTERISTIC(NAME, "RGB LED"),
             HOMEKIT_CHARACTERISTIC(
                 ON, true,
                 .getter = led_on_get,
@@ -210,66 +286,23 @@ homekit_accessory_t *accessories[] = {
 
 homekit_server_config_t config = {
     .accessories = accessories,
-    .password = "190-11-978"    //changed tobe valid
+    .password = "320-10-120"
 };
-
-IRAM void multipwm_task(void *pvParameters) {
-    const TickType_t xPeriod = pdMS_TO_TICKS(LPF_INTERVAL);
-    TickType_t xLastWakeTime = xTaskGetTickCount();
-    
-    uint8_t pins[] = {RED_PWM_PIN, GREEN_PWM_PIN, BLUE_PWM_PIN};
-
-    pwm_info_t pwm_info;
-    pwm_info.channels = 3;
-
-    multipwm_init(&pwm_info);
-    multipwm_set_freq(&pwm_info, 65535);
-    for (uint8_t i=0; i<pwm_info.channels; i++) {
-        multipwm_set_pin(&pwm_info, i, pins[i]);
-    }
-
-    while(1) {
-        if (led_on) {
-            // convert HSI to RGBW
-            hsi2rgb(led_hue, led_saturation, led_brightness, &target_color);
-        } else {
-            target_color.red = 0;
-            target_color.green = 0;
-            target_color.blue = 0;
-        }
-        
-        current_color.red += ((target_color.red * 256) - current_color.red) >> LPF_SHIFT ;
-        current_color.green += ((target_color.green * 256) - current_color.green) >> LPF_SHIFT ;
-        current_color.blue += ((target_color.blue * 256) - current_color.blue) >> LPF_SHIFT ;
-        
-        multipwm_stop(&pwm_info);
-        multipwm_set_duty(&pwm_info, 0, current_color.red);
-        multipwm_set_duty(&pwm_info, 1, current_color.green);
-        multipwm_set_duty(&pwm_info, 2, current_color.blue);
-        multipwm_start(&pwm_info);
-                
-        vTaskDelayUntil(&xLastWakeTime, xPeriod);
-    }
-}
 
 void on_wifi_ready() {
     homekit_server_init(&config);
 }
 
 void user_init(void) {
-    //uart_set_baud(0, 115200);
-    
-    // This example shows how to use same firmware for multiple similar accessories
-    // without name conflicts. It uses the last 3 bytes of accessory's MAC address as
-    // accessory name suffix.
+    uart_set_baud(0, 115200);
     uint8_t macaddr[6];
     sdk_wifi_get_macaddr(STATION_IF, macaddr);
-    int name_len = snprintf(NULL, 0, "LED Strip-%02X%02X%02X", macaddr[1], macaddr[2], macaddr[3]);
+    int name_len = snprintf(NULL, 0, "RGB LED-%02X%02X%02X", macaddr[1], macaddr[2], macaddr[3]);
     char *name_value = malloc(name_len + 1);
-    snprintf(name_value, name_len + 1, "LED Strip-%02X%02X%02X", macaddr[1], macaddr[2], macaddr[3]);
+    snprintf(name_value, name_len + 1, "RGB LED-%02X%02X%02X", macaddr[1], macaddr[2], macaddr[3]);
     name.value = HOMEKIT_STRING(name_value);
 
-    wifi_config_init("MagicHome Led Strip", NULL, on_wifi_ready);
-    
-    xTaskCreate(multipwm_task, "multipwm", 256, NULL, 2, NULL);
+    wifi_config_init("RGB LED", NULL, on_wifi_ready);
+
+    led_strip_init();
 }
