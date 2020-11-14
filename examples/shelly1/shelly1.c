@@ -14,28 +14,64 @@
  #include <homekit/characteristics.h>
  #include <wifi_config.h>
 
+ #include <sysparam.h>
+
  #include "adv_button.h"
 
  #define D_MANIFACTURER "Armo Ltd."
- #define D_SN "A2AVBG01P001"
- #define D_MODEL "Shelly1 Switch"
- #define D_FW "0.1.7"
- #define D_AN1 "Shelly1"
+ #define D_MODEL "Switch"
+ #define D_FW "0.1.11"
+ #define D_AN1 "Switch"
  #define D_PASS "111-11-111"
- #define D_AN2 "Shelly1-11%02X%02X%02X"
+ #define D_AN2 "Switch-11%02X%02X%02X"
 
  #define TOGGLE_GPIO     5
  #define RELAY_GPIO      4
 
- int t_count=0;
+ #define SWITCH_SYSPARAM "0"
 
- ETSTimer reset_tmr, toggle_tmr;
+ int t_count=0;
+ bool timer_running = false;
+ bool switch_on_status = false;
+ static char wifi_mac_address[32];
+
+ ETSTimer reset_tmr, toggle_tmr, memory_timer;
 
  void toggle_count();
- void switch_on_callback(homekit_characteristic_t *_ch, homekit_value_t on, void *context);
+ void switch_on_callback(homekit_value_t value);
+ homekit_value_t read_switch_state();
+
+ homekit_characteristic_t switch_on = HOMEKIT_CHARACTERISTIC_(ON, false, .getter=read_switch_state, .setter=switch_on_callback);
 
  void relay_write(bool on, int gpio) {
      gpio_write(gpio, on ? 1 : 0);
+ }
+
+ void remember_state() {
+   sysparam_status_t status;
+   timer_running = false;
+
+   sdk_os_timer_disarm(&memory_timer);
+
+   status = sysparam_set_bool(SWITCH_SYSPARAM, switch_on_status);
+   if (status != SYSPARAM_OK) {
+     printf("Saving settings error -> %i\n", status);
+   }
+   printf("Saving settings to memory %i\n", status);
+ }
+
+ void read_memory() {
+   sysparam_status_t status;
+   bool bool_value;
+
+   status = sysparam_get_bool(SWITCH_SYSPARAM, &bool_value);
+   printf("Status %i\n", status);
+
+   if (status == SYSPARAM_OK) {
+     switch_on_status = bool_value;
+   } else {
+     status = sysparam_set_bool(SWITCH_SYSPARAM, false);
+   }
  }
 
  void reset_configuration_task() {
@@ -52,31 +88,54 @@
 
  void reset_configuration() {
      relay_write(false, RELAY_GPIO);
-     gpio_disable(RELAY_GPIO);
+     //gpio_disable(RELAY_GPIO);
+     sysparam_set_bool(SWITCH_SYSPARAM, false);
      printf("Resetting device configuration\n");
      xTaskCreate(reset_configuration_task, "Reset configuration", 256, NULL, 2, NULL);
  }
-
- homekit_characteristic_t switch_on = HOMEKIT_CHARACTERISTIC_(ON, false, .callback=HOMEKIT_CHARACTERISTIC_CALLBACK(switch_on_callback));
 
  void gpio_init() {
      gpio_enable(TOGGLE_GPIO, GPIO_INPUT);
      gpio_set_pullup(TOGGLE_GPIO, false, false);
      gpio_enable(RELAY_GPIO, GPIO_OUTPUT);
-     relay_write(false, RELAY_GPIO);
+     read_memory();
+     relay_write(switch_on_status, RELAY_GPIO);
+     switch_on.value.bool_value = switch_on_status;
+     sdk_os_timer_setfn(&memory_timer, remember_state, NULL);
  }
 
- void switch_on_callback(homekit_characteristic_t *_ch, homekit_value_t on, void *context) {
+ void switch_on_callback(homekit_value_t value) {
+     switch_on.value = value;
      relay_write(switch_on.value.bool_value, RELAY_GPIO);
+     read_memory();
+     if (switch_on.value.bool_value != switch_on_status) {
+       switch_on_status = switch_on.value.bool_value;
+       if (!timer_running) {
+         timer_running = true;
+         sdk_os_timer_arm(&memory_timer, 10000, 0);
+       }
+     }
+ }
+
+ homekit_value_t read_switch_state() {
+     return switch_on.value;
  }
 
  void toggle_switch(const uint8_t gpio) {
      printf("Toggle Switch manual\n");
      switch_on.value.bool_value = !switch_on.value.bool_value;
-     relay_write(switch_on.value.bool_value, gpio);
+     relay_write(switch_on.value.bool_value, RELAY_GPIO);
      homekit_characteristic_notify(&switch_on, switch_on.value);
      t_count++;
      toggle_count();
+     read_memory();
+     if (switch_on.value.bool_value != switch_on_status) {
+       switch_on_status = switch_on.value.bool_value;
+       if (!timer_running) {
+         timer_running = true;
+         sdk_os_timer_arm(&memory_timer, 10000, 0);
+       }
+     }
  }
 
  void stop_count() {
@@ -161,7 +220,7 @@
          HOMEKIT_SERVICE(ACCESSORY_INFORMATION, .characteristics=(homekit_characteristic_t*[]){
              &name,
              HOMEKIT_CHARACTERISTIC(MANUFACTURER, D_MANIFACTURER),
-             HOMEKIT_CHARACTERISTIC(SERIAL_NUMBER, D_SN),
+             HOMEKIT_CHARACTERISTIC(SERIAL_NUMBER, wifi_mac_address),
              HOMEKIT_CHARACTERISTIC(MODEL, D_MODEL),
              HOMEKIT_CHARACTERISTIC(FIRMWARE_REVISION, D_FW),
              HOMEKIT_CHARACTERISTIC(IDENTIFY, switch_identify),
@@ -198,11 +257,12 @@
      uint8_t macaddr[6];
      sdk_wifi_get_macaddr(STATION_IF, macaddr);
 
-     int name_len = snprintf(NULL, 0, D_AN2,
-                             macaddr[3], macaddr[4], macaddr[5]);
+     sprintf(wifi_mac_address, "%02X%02X%02X%02X%02X%02X", macaddr[0], macaddr[1], macaddr[2], macaddr[3], macaddr[4], macaddr[5]);
+     printf("Device WIFI mac_address: %s\n", wifi_mac_address);
+
+     int name_len = snprintf(NULL, 0, D_AN2, macaddr[3], macaddr[4], macaddr[5]);
      char *name_value = malloc(name_len+1);
-     snprintf(name_value, name_len+1, D_AN2,
-              macaddr[3], macaddr[4], macaddr[5]);
+     snprintf(name_value, name_len+1, D_AN2, macaddr[3], macaddr[4], macaddr[5]);
 
      name.value = HOMEKIT_STRING(name_value);
  }
